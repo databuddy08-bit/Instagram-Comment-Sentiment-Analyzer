@@ -1,0 +1,14 @@
+{
+    "actorOutputSchemaVersion": 1,
+    "title": "Instagram Comment Sentiment Analyzer Output",
+    "description": "Analyzed Instagram comments with sentiment scores, labels, emotion tags, and engagement metrics.",
+    "type": "object",
+    "properties": {
+        "analyzedComments": {
+            "type": "string",
+            "title": "Analyzed Comments",
+            "description": "Instagram comments with sentiment analysis results including scores, labels, positive/negative words, and emotion tags.",
+            "template": "{{links.apiDefaultDatasetUrl}}/items"
+        }
+    }
+}
