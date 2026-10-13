@@ -9,6 +9,31 @@
     "dockerfile": "../Dockerfile",
     "readme": "../README.md",
     "storages": {
-        "dataset": "./dataset_schema.json"
-    }
+        "dataset": {
+            "actorSpecification": 1,
+            "views": {
+                "overview": {
+                    "title": "Analyzed Comments",
+                    "description": "Instagram comments with sentiment analysis results",
+                    "transformation": {
+                        "fields": ["postShortcode","commentAuthor","commentText","sentimentLabel","sentimentScore","emotionTags","commentLikes","commentTimestamp"]
+                    },
+                    "display": {
+                        "component": "table",
+                        "properties": {
+                            "postShortcode": { "label": "Post", "format": "text" },
+                            "commentAuthor": { "label": "Author", "format": "text" },
+                            "commentText": { "label": "Comment", "format": "text" },
+                            "sentimentLabel": { "label": "Sentiment", "format": "text" },
+                            "sentimentScore": { "label": "Score", "format": "number" },
+                            "emotionTags": { "label": "Emotions", "format": "array" },
+                            "commentLikes": { "label": "Likes", "format": "number" },
+                            "commentTimestamp": { "label": "Time", "format": "text" }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "output": "./OUTPUT_SCHEMA.json"
 }
