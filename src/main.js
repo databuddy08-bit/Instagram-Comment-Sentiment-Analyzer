@@ -129,9 +129,6 @@ for (const postUrl of postUrls) {
         analyzedCount++;
         totalCommentsAnalyzed++;
 
-        // Charge per event (pay-per-event billing)
-        await Actor.charge({ eventName: 'comment-analyzed', count: 1 });
-
         // Also process replies if they exist in the comment object
         if (includeReplies && comment.replies && Array.isArray(comment.replies)) {
             for (const reply of comment.replies) {
@@ -165,7 +162,6 @@ for (const postUrl of postUrls) {
 
                 analyzedCount++;
                 totalCommentsAnalyzed++;
-                await Actor.charge({ eventName: 'comment-analyzed', count: 1 });
             }
         }
     }
