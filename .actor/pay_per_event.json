@@ -1,0 +1,13 @@
+{
+    "schemaVersion": 1,
+    "config": {
+        "minChargeAmountUsd": 0.005,
+        "events": {
+            "comment-analyzed": {
+                "displayName": "Comment analyzed",
+                "description": "Charged for each Instagram comment that is scraped and has sentiment analysis performed on it.",
+                "pricePerEventUsd": 0.01
+            }
+        }
+    }
+}

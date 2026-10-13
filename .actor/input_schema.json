@@ -1,0 +1,67 @@
+{
+    "title": "Instagram Comment Sentiment Analyzer Input",
+    "description": "Configure which Instagram posts to analyze and how many comments to process.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "postUrls": {
+            "title": "Instagram Post URLs",
+            "type": "array",
+            "description": "List of Instagram post URLs to scrape comments from. Supports /p/, /reel/, and /tv/ URLs.",
+            "editor": "stringList",
+            "prefill": ["https://www.instagram.com/p/EXAMPLE/"],
+            "items": {
+                "type": "string"
+            }
+        },
+        "maxComments": {
+            "title": "Max Comments Per Post",
+            "type": "integer",
+            "description": "Maximum number of comments to scrape per post. Set to 0 for all comments.",
+            "default": 100,
+            "minimum": 0,
+            "maximum": 10000,
+            "editor": "number"
+        },
+        "includeReplies": {
+            "title": "Include Reply Comments",
+            "type": "boolean",
+            "description": "Whether to also scrape and analyze replies to top-level comments.",
+            "default": false
+        },
+        "sentimentEngine": {
+            "title": "Sentiment Analysis Engine",
+            "type": "string",
+            "description": "Choose the sentiment analysis method. 'basic' uses the Sentiment library (fast, free). 'enhanced' uses Natural NLP library for deeper analysis.",
+            "default": "enhanced",
+            "enum": ["basic", "enhanced"],
+            "editor": "select"
+        },
+        "language": {
+            "title": "Comment Language",
+            "type": "string",
+            "description": "Primary language of comments for better sentiment accuracy. Use ISO 639-1 codes.",
+            "default": "en",
+            "editor": "textfield"
+        },
+        "minLikes": {
+            "title": "Minimum Likes Filter",
+            "type": "integer",
+            "description": "Only analyze comments with at least this many likes. Set to 0 to include all.",
+            "default": 0,
+            "minimum": 0,
+            "editor": "number"
+        },
+        "proxyConfiguration": {
+            "title": "Proxy Configuration",
+            "type": "object",
+            "description": "Proxy settings for accessing Instagram. Apify Proxy is recommended.",
+            "editor": "proxy",
+            "schemaPrefill": {
+                "useApifyProxy": true,
+                "apifyProxyGroups": ["RESIDENTIAL"]
+            }
+        }
+    },
+    "required": ["postUrls"]
+}
