@@ -48,10 +48,7 @@ for (const postUrl of postUrls) {
 
         log.info(`Calling apify/instagram-comment-scraper with input: ${JSON.stringify(scraperInput)}`);
 
-        const run = await Actor.call('apify/instagram-comment-scraper', scraperInput, {
-            memoryMbytes: 4096,
-            timeoutSecs: 300,
-        });
+        const run = await Actor.call('apify/instagram-comment-scraper', scraperInput);
 
         log.info(`Scraper run finished. Status: ${run.status}, Dataset ID: ${run.defaultDatasetId}`);
 
