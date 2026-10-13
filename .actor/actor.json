@@ -9,10 +9,6 @@
     "dockerfile": "../Dockerfile",
     "readme": "../README.md",
     "storages": {
-        "dataset": {
-            "actorSpecification": 1,
-            "title": "Analyzed Comments",
-            "description": "Instagram comments with sentiment analysis results"
-        }
+        "dataset": "./dataset_schema.json"
     }
 }
