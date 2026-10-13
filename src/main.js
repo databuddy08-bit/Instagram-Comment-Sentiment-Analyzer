@@ -18,171 +18,173 @@ if (!postUrls.length) {
     throw new Error('Please provide at least one Instagram post URL in the "postUrls" input field.');
 }
 
-log.info('Starting Instagram Comment Sentiment Analyzer');
+log.info('=== Instagram Comment Sentiment Analyzer ===');
 log.info(`Posts to analyze: ${postUrls.length}`);
 log.info(`Max comments per post: ${maxComments || 'All'}`);
 log.info(`Sentiment engine: ${sentimentEngine}`);
+log.info(`Include replies: ${includeReplies}`);
 
 const dataset = await Actor.openDataset();
 let totalCommentsAnalyzed = 0;
 
-// Import ApifyClient to read results from the scraper's dataset
-const { ApifyClient } = await import('apify-client');
-const client = new ApifyClient({ token: process.env.APIFY_TOKEN });
-
 for (const postUrl of postUrls) {
+    const shortcode = extractShortcode(postUrl);
+    if (!shortcode) {
+        log.warning(`Could not extract shortcode from URL: ${postUrl}`);
+        continue;
+    }
+
+    log.info(`\n--- Processing post: ${shortcode} ---`);
+
+    // Step 1: Fetch comments using Apify's official Instagram Comment Scraper
+    let comments = [];
+
     try {
-        const shortcode = extractShortcode(postUrl);
-        if (!shortcode) {
-            log.warning(`Could not extract shortcode from URL: ${postUrl}`);
-            continue;
-        }
-
-        log.info(`Processing post: ${shortcode}`);
-
-        // ---- Step 1: Get comments using a proven Instagram scraper ----
-        // We call Apify's Instagram scraper actor which handles all the
-        // authentication, proxy rotation, and anti-bot measures reliably.
         const scraperInput = {
             directUrls: [postUrl],
-            resultsType: 'comments',
             resultsLimit: maxComments > 0 ? maxComments : 500,
-            addParentData: true,
+            includeNestedComments: includeReplies,
         };
 
-        log.info(`Calling apify/instagram-scraper to fetch comments for ${shortcode}...`);
+        log.info(`Calling apify/instagram-comment-scraper with input: ${JSON.stringify(scraperInput)}`);
 
-        let comments = [];
+        const run = await Actor.call('apify/instagram-comment-scraper', scraperInput, {
+            memoryMbytes: 4096,
+            timeoutSecs: 300,
+        });
 
-        try {
-            const run = await Actor.call('apify/instagram-scraper', scraperInput, {
-                memoryMbytes: 1024,
-                timeoutSecs: 300,
-            });
+        log.info(`Scraper run finished. Status: ${run.status}, Dataset ID: ${run.defaultDatasetId}`);
 
-            if (run && run.status === 'SUCCEEDED') {
-                const { items } = await client.dataset(run.defaultDatasetId).listItems();
-                comments = items || [];
-                log.info(`apify/instagram-scraper returned ${comments.length} comments`);
-            } else {
-                log.warning(`apify/instagram-scraper run status: ${run?.status || 'unknown'}`);
-            }
-        } catch (scraperError) {
-            log.warning(`apify/instagram-scraper failed: ${scraperError.message}`);
-            log.info('Trying fallback scraper: apify/instagram-comment-scraper...');
-
-            try {
-                const fallbackInput = {
-                    directUrls: [postUrl],
-                    resultsLimit: maxComments > 0 ? maxComments : 500,
-                };
-                const run2 = await Actor.call('apify/instagram-comment-scraper', fallbackInput, {
-                    memoryMbytes: 512,
-                    timeoutSecs: 300,
-                });
-
-                if (run2 && run2.status === 'SUCCEEDED') {
-                    const { items } = await client.dataset(run2.defaultDatasetId).listItems();
-                    comments = items || [];
-                    log.info(`Fallback scraper returned ${comments.length} comments`);
-                }
-            } catch (fallbackError) {
-                log.warning(`Fallback scraper also failed: ${fallbackError.message}`);
-            }
-        }
-
-        if (comments.length === 0) {
-            log.warning(`No comments retrieved for post: ${postUrl}. The post may have comments disabled or the scraper may need different configuration.`);
+        if (run.status !== 'SUCCEEDED') {
+            log.error(`Scraper run did not succeed. Status: ${run.status}`);
             continue;
         }
 
-        // ---- Step 2: Run sentiment analysis on each comment ----
-        log.info(`Analyzing sentiment for ${comments.length} comments...`);
+        // Fetch results using Apify REST API via got-scraping (built into SDK)
+        const { gotScraping } = await import('got-scraping');
+        const token = process.env.APIFY_TOKEN;
 
-        // Try to extract post info from the first comment's parent data
-        const sampleComment = comments[0];
-        const postOwner = sampleComment?.ownerUsername
-            || sampleComment?.postOwnerUsername
-            || sampleComment?.owner?.username
-            || 'unknown';
+        const datasetUrl = `https://api.apify.com/v2/datasets/${run.defaultDatasetId}/items?token=${token}`;
+        log.info(`Fetching results from dataset...`);
 
-        let analyzedCount = 0;
-        for (const comment of comments) {
-            if (maxComments > 0 && analyzedCount >= maxComments) break;
-
-            // Get comment likes (handle different field names from different scrapers)
-            const commentLikes = comment.likesCount
-                ?? comment.likes
-                ?? comment.commentLikesCount
-                ?? comment.edge_liked_by?.count
-                ?? 0;
-
-            if (commentLikes < minLikes) continue;
-
-            // Skip replies if not requested
-            const isReply = comment.isReply || comment.parentCommentId != null || false;
-            if (!includeReplies && isReply) continue;
-
-            // Get comment text (handle different field names)
-            const commentText = comment.text || comment.body || comment.comment || '';
-            if (!commentText.trim()) continue;
-
-            // Get comment author
-            const commentAuthor = comment.ownerUsername
-                || comment.username
-                || comment.author
-                || comment.owner?.username
-                || 'unknown';
-
-            // Run sentiment analysis
-            const sentiment = analyzeSentiment(commentText, sentimentEngine, language);
-
-            const result = {
-                postUrl,
-                postShortcode: shortcode,
-                postOwner,
-                commentId: comment.id || comment.pk || `comment_${analyzedCount}`,
-                commentText,
-                commentAuthor,
-                commentLikes,
-                commentTimestamp: comment.timestamp || comment.createdAt || comment.created_at || null,
-                isReply,
-                parentCommentId: comment.parentCommentId || null,
-                sentimentScore: sentiment.score,
-                sentimentLabel: sentiment.label,
-                sentimentComparative: sentiment.comparative,
-                positiveWords: sentiment.positive,
-                negativeWords: sentiment.negative,
-                emotionTags: sentiment.emotions,
-                language,
-                analyzedAt: new Date().toISOString(),
-            };
-
-            await dataset.pushData(result);
-            analyzedCount++;
-            totalCommentsAnalyzed++;
-
-            // Charge per event (pay-per-event billing)
-            await Actor.charge({ eventName: 'comment-analyzed', count: 1 });
-        }
-
-        log.info(`Post ${shortcode}: analyzed ${analyzedCount} out of ${comments.length} comments`);
-
-        // Push a summary record for this post
-        await dataset.pushData({
-            _type: 'POST_SUMMARY',
-            postUrl,
-            postShortcode: shortcode,
-            postOwner,
-            totalCommentsAnalyzed: analyzedCount,
-            totalScrapedComments: comments.length,
-            analyzedAt: new Date().toISOString(),
+        const response = await gotScraping({
+            url: datasetUrl,
+            responseType: 'json',
+            timeout: { request: 30000 },
         });
 
+        comments = response.body || [];
+        log.info(`Fetched ${comments.length} comments from scraper dataset`);
+
     } catch (error) {
-        log.error(`Error processing ${postUrl}: ${error.message}`);
+        log.error(`Failed to fetch comments for ${postUrl}: ${error.message}`);
+        log.error(`Error details: ${error.stack || 'No stack trace'}`);
+        continue;
     }
+
+    if (comments.length === 0) {
+        log.warning(`No comments found for post: ${postUrl}`);
+        continue;
+    }
+
+    // Step 2: Run sentiment analysis on each comment
+    log.info(`Running sentiment analysis on ${comments.length} comments...`);
+
+    let analyzedCount = 0;
+
+    for (const comment of comments) {
+        if (maxComments > 0 && analyzedCount >= maxComments) break;
+
+        // Map fields from apify/instagram-comment-scraper output
+        const commentText = comment.text || '';
+        const commentLikes = comment.likesCount ?? 0;
+        const commentAuthor = comment.ownerUsername || 'unknown';
+        const commentTimestamp = comment.timestamp || null;
+        const commentId = comment.id || `comment_${analyzedCount}`;
+
+        // Apply filters
+        if (commentLikes < minLikes) continue;
+        if (!commentText.trim()) continue;
+
+        // Analyze sentiment
+        const sentiment = analyzeSentiment(commentText, sentimentEngine, language);
+
+        const result = {
+            postUrl,
+            postShortcode: shortcode,
+            commentId,
+            commentText,
+            commentAuthor,
+            commentLikes,
+            commentTimestamp,
+            isReply: false,
+            sentimentScore: sentiment.score,
+            sentimentLabel: sentiment.label,
+            sentimentComparative: sentiment.comparative,
+            positiveWords: sentiment.positive,
+            negativeWords: sentiment.negative,
+            emotionTags: sentiment.emotions,
+            language,
+            analyzedAt: new Date().toISOString(),
+        };
+
+        await dataset.pushData(result);
+        analyzedCount++;
+        totalCommentsAnalyzed++;
+
+        // Charge per event (pay-per-event billing)
+        await Actor.charge({ eventName: 'comment-analyzed', count: 1 });
+
+        // Also process replies if they exist in the comment object
+        if (includeReplies && comment.replies && Array.isArray(comment.replies)) {
+            for (const reply of comment.replies) {
+                if (maxComments > 0 && analyzedCount >= maxComments) break;
+
+                const replyText = reply.text || '';
+                const replyLikes = reply.likesCount ?? 0;
+                if (replyLikes < minLikes || !replyText.trim()) continue;
+
+                const replySentiment = analyzeSentiment(replyText, sentimentEngine, language);
+
+                await dataset.pushData({
+                    postUrl,
+                    postShortcode: shortcode,
+                    commentId: reply.id || `reply_${analyzedCount}`,
+                    commentText: replyText,
+                    commentAuthor: reply.ownerUsername || 'unknown',
+                    commentLikes: replyLikes,
+                    commentTimestamp: reply.timestamp || null,
+                    isReply: true,
+                    parentCommentId: commentId,
+                    sentimentScore: replySentiment.score,
+                    sentimentLabel: replySentiment.label,
+                    sentimentComparative: replySentiment.comparative,
+                    positiveWords: replySentiment.positive,
+                    negativeWords: replySentiment.negative,
+                    emotionTags: replySentiment.emotions,
+                    language,
+                    analyzedAt: new Date().toISOString(),
+                });
+
+                analyzedCount++;
+                totalCommentsAnalyzed++;
+                await Actor.charge({ eventName: 'comment-analyzed', count: 1 });
+            }
+        }
+    }
+
+    log.info(`Post ${shortcode}: analyzed ${analyzedCount} comments`);
+
+    // Push post summary
+    await dataset.pushData({
+        _type: 'POST_SUMMARY',
+        postUrl,
+        postShortcode: shortcode,
+        totalCommentsAnalyzed: analyzedCount,
+        totalScrapedComments: comments.length,
+        analyzedAt: new Date().toISOString(),
+    });
 }
 
-log.info(`Finished! Total comments analyzed: ${totalCommentsAnalyzed}`);
+log.info(`\n=== Finished! Total comments analyzed: ${totalCommentsAnalyzed} ===`);
 await Actor.exit();

@@ -12,7 +12,6 @@
     "license": "ISC",
     "dependencies": {
         "apify": "^3.1.0",
-        "apify-client": "^2.9.0",
         "sentiment": "^5.0.2",
         "natural": "^6.10.0"
     }
