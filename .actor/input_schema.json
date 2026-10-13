@@ -57,7 +57,7 @@
             "type": "object",
             "description": "Proxy settings for accessing Instagram. Apify Proxy is recommended.",
             "editor": "proxy",
-            "schemaPrefill": {
+            "prefill": {
                 "useApifyProxy": true,
                 "apifyProxyGroups": ["RESIDENTIAL"]
             }
